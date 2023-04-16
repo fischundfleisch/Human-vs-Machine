@@ -1,0 +1,69 @@
+﻿FUNCTION "SCL" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_TEMP 
+      temp_Name : String[10];
+      temp_Zeit : LReal;
+      temp_Score1 : "t_Score";
+      temp_Score2 : "t_Score";
+      j : Int;
+   END_VAR
+
+
+BEGIN
+	// Zuerst vergleichen wir ob der Merker_Start seit dem letzten Durchlauf auf true gesetzt wurde. 
+	// Wenn er das letzte Mal schon true war oder letztes und dieses Mal false ist, wird nichts getan. 
+	// Nur wenn der Zustand von false auf true wechselst, starten wir unseren Timer. Und dann ändern wir 
+	// natürlich den Merker_Start_last, damit wir beim nächsten Durchlauf wissen: Der war ja schon true
+	
+	IF "Merker_Start" = true AND "Merker_Start_last" = FALSE THEN
+	    #temp_Zeit := RUNTIME("timer_start");                       // RUNTIME ist ein Befehl, der die Laufzeit der CPU ermittelt und uns hier als Timer dient
+	    "Merker_Start_last" := true;
+	END_IF;
+	
+	// Wenn der Merker_Start dieses Mal false ist und vorher true war, dann wird der Timer gestoppt. Wieder muss am Ende
+	// der Anweisung die Merker_Start_last aktualisiert werden, damit wir beim nächsten Durchlauf wissen: Ja, der war 
+	// ausgeschaltet.
+	
+	IF "Merker_Start_last" = true AND "Merker_Start" = false THEN
+	    #temp_Zeit := RUNTIME("timer_start");
+	    "Merker_Start_last" := false;
+	    
+	    // in "temp_Zeit" ist jetzt unsere Laufzeit gespeichert. Wir haben ein globales Array namens "Ereignisliste",
+	    // und darin sind beim ersten Durchlauf alle Zeiten mit 3600.0 initialisiert. Warum? Nun, wenn alle beim Start Null
+	    // wären, dann würde nie eine kleinere Zeit gespeichert werden. Und 3600.0 weil ein LREAL Datentyp, den wir vom RUNTIME-Befehl zurück bekommen,
+	    // in Sekunden vor dem Komma misst. Wir geben einmal eine Stunde als höchsten Wert an, dieser kann aber auch beliebig (bis 1.7976931348623157E+308)
+	    // nach oben korrigiert werden.
+	    // 
+	    //Nun prüfen wir die eingegebene Zeit und schauen in unserem Array nach, ob sie kleiner als Platz i ist:
+	    
+	    FOR "i" := 0 TO 29 DO //von 0 bis 29 fragen wir jeden einzelnen Platz ab
+	        IF "DB_Score".Ergebnisliste["i"].Zeit > #temp_Zeit THEN             // ist die erreichte Zeit besser als die auf diesem Platz gespeicherte?
+	            #temp_Score2.Zeit := "DB_Score".Ergebnisliste["i"].Zeit;        // wenn ja, speichere die alte Zeit und den alten Namen in einen Zwischenspeicher
+	            #temp_Score2.Name := "DB_Score".Ergebnisliste["i"].Name;
+	            "DB_Score".Ergebnisliste["i"].Zeit := #temp_Zeit;                // speichere die neue Zeit und den neuen Namen in den jetzt leeren Platz
+	            "DB_Score".Ergebnisliste["i"].Name := #temp_Name;
+	            //sind wir auf Platz 29, dann wars das. Sind wir besser, müssen wir alle anderen darunter auf eine neue Zeile verschieben:
+	            IF "i" < 29 THEN                                                                            
+	                FOR #j := "i"+1 TO 29 DO        // von einer Reihe unter dem neuen Eintrag weg bis zum Platz 29 
+	                    #temp_Score1.Zeit := "DB_Score".Ergebnisliste[#j].Zeit;     // speichere Zeit und Namen in einen Zwischenspeicher
+	                    #temp_Score1.Name := "DB_Score".Ergebnisliste[#j].Name;
+	                    "DB_Score".Ergebnisliste[#j].Zeit := #temp_Score2.Zeit;     // beschreibe mit dem was vorher im anderen Zwischenspeicher war den neuen leeren Platz
+	                    "DB_Score".Ergebnisliste[#j].Name := #temp_Score2.Name;
+	                    #temp_Score2.Zeit := #temp_Score1.Zeit;                     // tausche die Zwischenspeicher
+	                    #temp_Score2.Name := #temp_Score1.Name;
+	                END_FOR;
+	                RETURN;                                                         // verlasse die Schleife wenn wir damit durch sind
+	            END_IF;
+	            
+	        END_IF;
+	        
+	    END_FOR;
+	    
+	END_IF;
+	
+	
+	
+	
+END_FUNCTION
+
